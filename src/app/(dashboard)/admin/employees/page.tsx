@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, MoreVertical, Mail, Phone, Shield, Loader2 } from "lucide-react";
+import { Plus, Search, MoreVertical, Mail, Phone, Shield, Loader2, Edit2, Save, X, Briefcase } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Profile } from "@/types/database";
 
@@ -9,22 +9,72 @@ export default function EmployeesPage() {
     const [employees, setEmployees] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
-    const [showAddModal, setShowAddModal] = useState(false);
+
+    // Edit Modal State
+    const [editingEmp, setEditingEmp] = useState<Profile | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    // Form State (derived from editingEmp)
+    const [formData, setFormData] = useState({
+        full_name: "",
+        phone_number: "",
+        job_title: "",
+        role: "employee" as "admin" | "employee"
+    });
+
     const supabase = createClient();
 
     useEffect(() => {
-        const fetchEmployees = async () => {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('full_name', { ascending: true });
-
-            if (data) setEmployees(data);
-            setLoading(false);
-        };
-
         fetchEmployees();
     }, []);
+
+    const fetchEmployees = async () => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('full_name', { ascending: true });
+
+        if (data) setEmployees(data);
+        setLoading(false);
+    };
+
+    const handleEditClick = (emp: Profile) => {
+        setEditingEmp(emp);
+        setFormData({
+            full_name: emp.full_name || "",
+            phone_number: emp.phone_number || "",
+            job_title: emp.job_title || "",
+            role: emp.role
+        });
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingEmp) return;
+        setSaving(true);
+
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: formData.full_name,
+                    phone_number: formData.phone_number,
+                    job_title: formData.job_title,
+                    role: formData.role
+                })
+                .eq('id', editingEmp.id);
+
+            if (error) throw error;
+
+            // Refresh list
+            await fetchEmployees();
+            setEditingEmp(null); // Close modal
+        } catch (error: any) {
+            alert("Error updating profile: " + error.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const filteredEmployees = employees.filter(emp =>
         (emp.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -32,18 +82,14 @@ export default function EmployeesPage() {
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Employees</h2>
                     <p className="text-gray-400 text-sm">Manage your team members and permissions</p>
                 </div>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors w-full sm:w-auto justify-center"
-                >
-                    <Plus className="h-4 w-4" /> Add Employee
-                </button>
+                {/* Note: 'Add Employee' functionality requires Supabase Auth Admin API or Invitation flow, which is complex on client-side. hiding for now to focus on Edit. */}
+                {/* <button className="..." ...><Plus ... /> Add Employee</button> */}
             </div>
 
             <div className="bg-card border border-gray-800 rounded-xl overflow-hidden">
@@ -66,10 +112,9 @@ export default function EmployeesPage() {
                     <table className="w-full text-left text-sm">
                         <thead className="bg-gray-900/50 text-gray-400 font-medium">
                             <tr>
-                                <th className="px-6 py-3">Name</th>
+                                <th className="px-6 py-3">Name & Role</th>
+                                <th className="px-6 py-3">Job Title</th>
                                 <th className="px-6 py-3">Contact</th>
-                                <th className="px-6 py-3">Role</th>
-                                <th className="px-6 py-3">Status</th>
                                 <th className="px-6 py-3">Joined</th>
                                 <th className="px-6 py-3 text-right">Actions</th>
                             </tr>
@@ -77,7 +122,7 @@ export default function EmployeesPage() {
                         <tbody className="divide-y divide-gray-800">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                                         <div className="flex items-center justify-center gap-2">
                                             <Loader2 className="h-4 w-4 animate-spin" />
                                             Loading employees...
@@ -86,7 +131,7 @@ export default function EmployeesPage() {
                                 </tr>
                             ) : filteredEmployees.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                                         No employees found.
                                     </td>
                                 </tr>
@@ -95,39 +140,48 @@ export default function EmployeesPage() {
                                     <tr key={emp.id} className="hover:bg-gray-800/30 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-white">
+                                                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
                                                     {(emp.full_name || emp.email || '?').charAt(0).toUpperCase()}
                                                 </div>
-                                                <span className="font-medium text-white">{emp.full_name || 'No Name'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-400">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    <Mail className="h-3 w-3" /> {emp.email}
+                                                <div>
+                                                    <div className="font-medium text-white">{emp.full_name || 'No Name'}</div>
+                                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border mt-1 ${emp.role === 'admin'
+                                                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                        }`}>
+                                                        {emp.role}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${emp.role === 'admin'
-                                                ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                                : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                                }`}>
-                                                <Shield className="h-3 w-3" />
-                                                {emp.role}
-                                            </span>
+                                        <td className="px-6 py-4 text-gray-300">
+                                            {emp.job_title ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Briefcase className="h-3 w-3 text-gray-500" />
+                                                    {emp.job_title}
+                                                </div>
+                                            ) : <span className="text-gray-600 italic">--</span>}
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400">
-                                                Active
-                                            </span>
+                                        <td className="px-6 py-4 text-gray-400 space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <Mail className="h-3 w-3" /> {emp.email}
+                                            </div>
+                                            {emp.phone_number && (
+                                                <div className="flex items-center gap-2">
+                                                    <Phone className="h-3 w-3" /> {emp.phone_number}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-gray-500 text-xs text-nowrap">
                                             {new Date(emp.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="text-gray-500 hover:text-white transition-colors p-1 rounded-md hover:bg-gray-800">
-                                                <MoreVertical className="h-4 w-4" />
+                                            <button
+                                                onClick={() => handleEditClick(emp)}
+                                                className="text-gray-500 hover:text-white transition-colors p-2 rounded-md hover:bg-gray-800 grid place-items-center ml-auto"
+                                                title="Edit Employee"
+                                            >
+                                                <Edit2 className="h-4 w-4" />
                                             </button>
                                         </td>
                                     </tr>
@@ -137,6 +191,82 @@ export default function EmployeesPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Edit Slide-over / Modal */}
+            {editingEmp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-card border border-gray-800 w-full max-w-md rounded-xl shadow-2xl animate-in fade-in zoom-in-95">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                            <h3 className="font-semibold text-white">Edit Employee</h3>
+                            <button
+                                onClick={() => setEditingEmp(null)}
+                                className="text-gray-500 hover:text-white"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSave} className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 uppercase">Full Name</label>
+                                <input
+                                    className="w-full bg-gray-900 border border-gray-700 rounded-md p-2.5 text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    value={formData.full_name}
+                                    onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 uppercase">Job Title</label>
+                                <input
+                                    className="w-full bg-gray-900 border border-gray-700 rounded-md p-2.5 text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    value={formData.job_title}
+                                    onChange={e => setFormData({ ...formData, job_title: e.target.value })}
+                                    placeholder="e.g. Foreman"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 uppercase">Phone Number</label>
+                                <input
+                                    className="w-full bg-gray-900 border border-gray-700 rounded-md p-2.5 text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    value={formData.phone_number}
+                                    onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 uppercase">System Role</label>
+                                <select
+                                    className="w-full bg-gray-900 border border-gray-700 rounded-md p-2.5 text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    value={formData.role}
+                                    onChange={e => setFormData({ ...formData, role: e.target.value as any })}
+                                >
+                                    <option value="employee">Employee</option>
+                                    <option value="admin">Administrator</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingEmp(null)}
+                                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="flex-1 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
