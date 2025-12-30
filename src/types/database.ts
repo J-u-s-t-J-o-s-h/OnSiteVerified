@@ -16,6 +16,7 @@ export interface JobSite {
     latitude: number;
     longitude: number;
     radius_meters: number;
+    is_active: boolean;
     created_at: string;
 }
 

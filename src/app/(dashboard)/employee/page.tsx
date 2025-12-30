@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MapPin, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { MapPin, Clock, AlertTriangle, CheckCircle, Loader2, Navigation } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { JobSite, Timesheet } from "@/types/database";
 import { calculateDistance } from "@/lib/geo";
@@ -16,6 +16,9 @@ export default function EmployeeDashboard() {
     const [nearestSite, setNearestSite] = useState<{ site: JobSite, distance: number } | null>(null);
     const [activeTimesheet, setActiveTimesheet] = useState<Timesheet | null>(null);
     const [sites, setSites] = useState<JobSite[]>([]);
+
+    // Watch ID for geolocation
+    const watchIdRef = useRef<number | null>(null);
 
     // Auth User ID
     const [userId, setUserId] = useState<string | null>(null);
@@ -32,8 +35,12 @@ export default function EmployeeDashboard() {
             if (!user) return;
             setUserId(user.id);
 
-            // Fetch Job Sites
-            const { data: sitesData } = await supabase.from('job_sites').select('*');
+            // Fetch ONLY Active Job Sites
+            const { data: sitesData } = await supabase
+                .from('job_sites')
+                .select('*')
+                .eq('is_active', true);
+
             if (sitesData) setSites(sitesData);
 
             // Fetch Active Timesheet (if any)
@@ -42,7 +49,7 @@ export default function EmployeeDashboard() {
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('status', 'clocked_in')
-                .single(); // Should only be one active at a time
+                .single();
 
             if (timesheetData) {
                 setStatus('clocked-in');
@@ -54,20 +61,26 @@ export default function EmployeeDashboard() {
         };
 
         loadInitialData();
-        refreshLocation();
+        startLocationWatch();
 
-        return () => clearInterval(timer);
+        return () => {
+            clearInterval(timer);
+            if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+        };
     }, []);
 
-    // 2. Geolocation Logic
-    const refreshLocation = () => {
+    // 2. Geolocation Logic (Auto-Watch)
+    const startLocationWatch = () => {
         setLocationError(null);
         if (!navigator.geolocation) {
             setLocationError("Geolocation is not supported by your browser");
             return;
         }
 
-        navigator.geolocation.getCurrentPosition(
+        // Clear existing watch if any
+        if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+
+        watchIdRef.current = navigator.geolocation.watchPosition(
             (position) => {
                 setLocation(position);
                 findNearestSite(position.coords.latitude, position.coords.longitude);
@@ -79,12 +92,17 @@ export default function EmployeeDashboard() {
                     setLocationError(error.message);
                 }
                 setNearestSite(null);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 5000
             }
         );
     };
 
     const handleMockLocation = () => {
-        // Mock to London center if no sites, or first site if exists
+        // Mock to first active site if exists, else London
         const lat = sites.length > 0 ? sites[0].latitude : 51.505;
         const lng = sites.length > 0 ? sites[0].longitude : -0.09;
 
@@ -107,7 +125,11 @@ export default function EmployeeDashboard() {
     };
 
     const findNearestSite = (lat: number, lng: number) => {
-        if (sites.length === 0) return;
+        // sites is already filtered to only Active sites
+        if (sites.length === 0) {
+            setNearestSite(null);
+            return;
+        }
 
         let closest: { site: JobSite, distance: number } | null = null;
         let minDist = Infinity;
@@ -120,8 +142,6 @@ export default function EmployeeDashboard() {
             }
         });
 
-        // Only set if within reasonable range (e.g. 50km) just to show something relevant
-        // The verification logic happens on Clock In
         if (closest) {
             setNearestSite(closest);
         }
@@ -130,7 +150,7 @@ export default function EmployeeDashboard() {
     const handleClockAction = async () => {
         if (!userId) return;
         if (!location) {
-            alert("We need your location to proceed!");
+            alert("Waiting for location signal...");
             return;
         }
 
@@ -138,9 +158,8 @@ export default function EmployeeDashboard() {
 
         if (status === 'clocked-out') {
             // CLOCK IN LOGIC
-            // 1. Check if near a site
             if (!nearestSite || nearestSite.distance > nearestSite.site.radius_meters) {
-                alert("You are too far from any job site to clock in.");
+                alert("You are too far from the active job site to clock in.\nPlease move closer to the site.");
                 setLoading(false);
                 return;
             }
@@ -163,7 +182,6 @@ export default function EmployeeDashboard() {
         } else {
             // CLOCK OUT LOGIC
             if (!activeTimesheet) {
-                // Should not happen if state is correct
                 setStatus('clocked-out');
                 setLoading(false);
                 return;
@@ -185,6 +203,16 @@ export default function EmployeeDashboard() {
     };
 
     const isSiteInRange = nearestSite && nearestSite.distance <= nearestSite.site.radius_meters;
+
+    const getDirectionsUrl = () => {
+        if (!nearestSite) return '#';
+        if (navigator.platform.indexOf("iPhone") !== -1 || navigator.platform.indexOf("iPad") !== -1 || navigator.platform.indexOf("iPod") !== -1) {
+            // Apple Maps
+            return `maps://maps.google.com/maps?daddr=${nearestSite.site.latitude},${nearestSite.site.longitude}&ll=`;
+        }
+        // Google Maps (Universal)
+        return `https://www.google.com/maps/dir/?api=1&destination=${nearestSite.site.latitude},${nearestSite.site.longitude}`;
+    };
 
     if (loading && !userId) {
         return (
@@ -237,8 +265,15 @@ export default function EmployeeDashboard() {
 
                     <div className="w-full bg-gray-900/50 rounded-lg p-4 border border-gray-800">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-gray-400">Location Status</span>
-                            <button onClick={refreshLocation} className="text-xs text-primary hover:underline">Refresh</button>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-400">Location Status</span>
+                                {!locationError && (
+                                    <span className="flex h-2 w-2 relative">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         {locationError ? (
@@ -255,29 +290,47 @@ export default function EmployeeDashboard() {
                                 </button>
                             </div>
                         ) : location ? (
-                            <div className="space-y-1">
+                            <div className="space-y-3">
                                 {nearestSite ? (
                                     <>
                                         <div className={`flex items-center gap-2 text-sm font-medium ${isSiteInRange ? 'text-green-400' : 'text-yellow-400'}`}>
                                             {isSiteInRange ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                                             {isSiteInRange ? "Verified: On Site" : `Too Far (${Math.round(nearestSite.distance)}m away)`}
                                         </div>
-                                        <div className="flex items-center gap-2 text-gray-400 text-xs">
-                                            <MapPin className="h-3 w-3" />
-                                            {nearestSite.site.name} (Radius: {nearestSite.site.radius_meters}m)
+
+                                        <div className="flex items-center justify-between bg-black/20 p-2 rounded">
+                                            <div className="flex items-center gap-2 text-gray-300 text-xs">
+                                                <MapPin className="h-4 w-4 text-primary" />
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-white">{nearestSite.site.name}</span>
+                                                    <span>Range: {nearestSite.site.radius_meters}m</span>
+                                                </div>
+                                            </div>
+
+                                            <a
+                                                href={getDirectionsUrl()}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1.5 rounded transition-colors"
+                                            >
+                                                <Navigation className="h-3 w-3" /> Directions
+                                            </a>
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="text-yellow-400 text-sm">No job sites found nearby.</div>
+                                    <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-md">
+                                        <div className="text-yellow-400 text-sm font-medium mb-1">No Active Job Sites</div>
+                                        <p className="text-gray-400 text-xs">There are no active job sites for today. Please contact your manager.</p>
+                                    </div>
                                 )}
-                                <div className="text-[10px] text-gray-600 font-mono pt-1">
-                                    {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-                                    (±{Math.round(location.coords.accuracy)}m)
+                                <div className="text-[10px] text-gray-600 font-mono pt-1 flex justify-between">
+                                    <span>{location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}</span>
+                                    <span>(±{Math.round(location.coords.accuracy)}m)</span>
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-gray-500 text-sm animate-pulse">
-                                Triangulating position...
+                            <div className="text-gray-500 text-sm animate-pulse flex items-center gap-2">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Triangulating position...
                             </div>
                         )}
                     </div>

@@ -331,15 +331,41 @@ export default function SitesPage() {
                         <div key={site.id} className="bg-card border border-gray-800 p-4 rounded-lg flex flex-col justify-between hover:border-gray-700 transition-colors">
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-2 text-white font-medium">
-                                    <MapPin className="h-5 w-5 text-primary" />
                                     {site.name}
                                 </div>
-                                <button
-                                    onClick={() => setDeletingId(site.id)}
-                                    className="text-gray-500 hover:text-red-400"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            // Optimistic Update
+                                            const newStatus = !site.is_active;
+                                            setSites(sites.map(s => s.id === site.id ? { ...s, is_active: newStatus } : s));
+
+                                            const { error } = await supabase
+                                                .from('job_sites')
+                                                .update({ is_active: newStatus })
+                                                .eq('id', site.id);
+
+                                            if (error) {
+                                                // Revert on error
+                                                setSites(sites.map(s => s.id === site.id ? { ...s, is_active: !newStatus } : s));
+                                                alert("Error updating status");
+                                            }
+                                        }}
+                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${site.is_active
+                                                ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                                                : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
+                                            }`}
+                                    >
+                                        {site.is_active ? 'Active' : 'Inactive'}
+                                    </button>
+                                    <button
+                                        onClick={() => setDeletingId(site.id)}
+                                        className="text-gray-500 hover:text-red-400"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                             <div className="text-xs text-gray-500 space-y-1 mb-4">
                                 <p>Lat: {site.latitude.toFixed(6)}</p>
