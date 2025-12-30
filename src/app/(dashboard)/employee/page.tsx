@@ -35,13 +35,14 @@ export default function EmployeeDashboard() {
             if (!user) return;
             setUserId(user.id);
 
-            // Fetch ONLY Active Job Sites
-            const { data: sitesData } = await supabase
-                .from('job_sites')
-                .select('*')
-                .eq('is_active', true);
+            // Fetch Job Sites and filter client-side to ensure consistency
+            const { data: sitesData } = await supabase.from('job_sites').select('*');
 
-            if (sitesData) setSites(sitesData);
+            if (sitesData) {
+                // Filter for active sites only
+                const active = sitesData.filter(s => s.is_active === true);
+                setSites(active);
+            }
 
             // Fetch Active Timesheet (if any)
             const { data: timesheetData } = await supabase
