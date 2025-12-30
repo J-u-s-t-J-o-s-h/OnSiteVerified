@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import MapWrapper from "@/components/map/MapWrapper";
-import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation, Edit2 } from "lucide-react";
+import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation, Edit2, AlertTriangle, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { JobSite } from "@/types/database";
 
@@ -12,6 +12,8 @@ export default function SitesPage() {
     const [showForm, setShowForm] = useState(false);
     const [saving, setSaving] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // New site form state
     const [newSite, setNewSite] = useState<{ name: string; lat: number; lng: number; radius: number }>({
@@ -153,19 +155,23 @@ export default function SitesPage() {
         setSaving(false);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this job site?")) return;
+    const confirmDelete = async () => {
+        if (!deletingId) return;
+        setIsDeleting(true);
 
-        const { error } = await supabase.from('job_sites').delete().eq('id', id);
+        const { error } = await supabase.from('job_sites').delete().eq('id', deletingId);
+
         if (!error) {
-            setSites(sites.filter(s => s.id !== id));
+            setSites(sites.filter(s => s.id !== deletingId));
+            setDeletingId(null);
         } else {
             alert("Error deleting site: " + error.message);
         }
+        setIsDeleting(false);
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
             <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white">Job Sites</h2>
                 <button
@@ -329,7 +335,7 @@ export default function SitesPage() {
                                     {site.name}
                                 </div>
                                 <button
-                                    onClick={() => handleDelete(site.id)}
+                                    onClick={() => setDeletingId(site.id)}
                                     className="text-gray-500 hover:text-red-400"
                                 >
                                     <Trash2 className="h-4 w-4" />
@@ -348,6 +354,42 @@ export default function SitesPage() {
                             </button>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-card border border-gray-800 w-full max-w-sm rounded-xl shadow-2xl p-6 space-y-4">
+                        <div className="flex items-center gap-3 text-red-400">
+                            <div className="p-2 bg-red-400/10 rounded-full">
+                                <AlertTriangle className="h-6 w-6" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white">Delete Job Site?</h3>
+                        </div>
+
+                        <p className="text-gray-400 text-sm">
+                            Are you sure you want to delete this job site? This action cannot be undone.
+                            Past time logs will be preserved but unlinked.
+                        </p>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => setDeletingId(null)}
+                                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={isDeleting}
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                Delete
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
