@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef } from "react";
 import MapWrapper from "@/components/map/MapWrapper";
 import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation } from "lucide-react";
