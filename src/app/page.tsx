@@ -55,10 +55,7 @@ export default function Home() {
                             Start Tracking Today
                             <ArrowRight className="w-4 h-4" />
                         </Link>
-                        <button className="w-full sm:w-auto px-8 py-4 bg-gray-800/50 hover:bg-gray-800 text-white border border-gray-700 hover:border-gray-600 rounded-xl font-semibold transition-all backdrop-blur-sm flex items-center justify-center gap-2 group">
-                            <Play className="w-4 h-4 fill-white group-hover:scale-110 transition-transform" />
-                            See How It Works
-                        </button>
+
                     </div>
                 </div>
 
