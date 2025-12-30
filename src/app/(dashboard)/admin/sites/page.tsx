@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import MapWrapper from "@/components/map/MapWrapper";
-import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation } from "lucide-react";
+import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation, Edit2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { JobSite } from "@/types/database";
 
@@ -11,6 +11,7 @@ export default function SitesPage() {
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // New site form state
     const [newSite, setNewSite] = useState<{ name: string; lat: number; lng: number; radius: number }>({
@@ -99,21 +100,53 @@ export default function SitesPage() {
         );
     };
 
+    const handleEdit = (site: JobSite) => {
+        setNewSite({
+            name: site.name,
+            lat: site.latitude,
+            lng: site.longitude,
+            radius: site.radius_meters
+        });
+        setEditingId(site.id);
+        setShowForm(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancel = () => {
+        setShowForm(false);
+        setEditingId(null);
+        setNewSite({ name: "", lat: 51.505, lng: -0.09, radius: 100 });
+    };
+
     const handleSave = async () => {
         if (!newSite.name) return;
         setSaving(true);
 
-        const { error } = await supabase.from('job_sites').insert({
-            name: newSite.name,
-            latitude: newSite.lat,
-            longitude: newSite.lng,
-            radius_meters: newSite.radius
-        });
+        let error;
+
+        if (editingId) {
+            // Update
+            const res = await supabase.from('job_sites').update({
+                name: newSite.name,
+                latitude: newSite.lat,
+                longitude: newSite.lng,
+                radius_meters: newSite.radius
+            }).eq('id', editingId);
+            error = res.error;
+        } else {
+            // Insert
+            const res = await supabase.from('job_sites').insert({
+                name: newSite.name,
+                latitude: newSite.lat,
+                longitude: newSite.lng,
+                radius_meters: newSite.radius
+            });
+            error = res.error;
+        }
 
         if (!error) {
             await fetchSites();
-            setShowForm(false);
-            setNewSite({ name: "", lat: 51.505, lng: -0.09, radius: 100 });
+            handleCancel();
         } else {
             alert("Error saving site: " + error.message);
         }
@@ -136,7 +169,10 @@ export default function SitesPage() {
             <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white">Job Sites</h2>
                 <button
-                    onClick={() => setShowForm(!showForm)}
+                    onClick={() => {
+                        if (showForm) handleCancel();
+                        else setShowForm(true);
+                    }}
                     className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
                 >
                     {showForm ? "Cancel" : <><Plus className="h-4 w-4" /> Add Site</>}
@@ -147,7 +183,9 @@ export default function SitesPage() {
                 <div className="bg-card border border-gray-800 rounded-xl p-6 shadow-xl animate-in fade-in slide-in-from-top-4">
                     <div className="grid lg:grid-cols-2 gap-8">
                         <div className="space-y-4">
-                            <h3 className="text-lg font-medium text-white mb-4">New Site Details</h3>
+                            <h3 className="text-lg font-medium text-white mb-4">
+                                {editingId ? "Edit Site Details" : "New Site Details"}
+                            </h3>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-300">Site Name</label>
@@ -205,7 +243,7 @@ export default function SitesPage() {
                                 className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Save Site
+                                {editingId ? "Update Site" : "Save Site"}
                             </button>
                         </div>
 
@@ -302,8 +340,11 @@ export default function SitesPage() {
                                 <p>Lng: {site.longitude.toFixed(6)}</p>
                                 <p>Radius: {site.radius_meters}m</p>
                             </div>
-                            <button className="w-full text-sm bg-gray-800 hover:bg-gray-700 text-white py-1.5 rounded transition-colors">
-                                View Details
+                            <button
+                                onClick={() => handleEdit(site)}
+                                className="w-full text-sm bg-gray-800 hover:bg-gray-700 text-white py-1.5 rounded transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Edit2 className="h-4 w-4" /> Edit Site
                             </button>
                         </div>
                     ))}
