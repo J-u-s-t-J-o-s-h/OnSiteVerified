@@ -27,13 +27,25 @@ export default function AuthForm() {
 
         try {
             if (isLogin) {
-                const { error } = await supabase.auth.signInWithPassword({
+                const { data: { user }, error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
                 });
                 if (error) throw error;
-                router.refresh(); // Refresh to update server-side auth state
-                router.push("/admin"); // Default redirect, middleware should handle better routing based on role
+                if (user) {
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', user.id)
+                        .single();
+
+                    if (profile?.role === 'admin') {
+                        router.push("/admin");
+                    } else {
+                        router.push("/employee");
+                    }
+                }
+                router.refresh();
             } else {
                 const { error } = await supabase.auth.signUp({
                     email,
