@@ -64,6 +64,13 @@ function LocationMarker({
     );
 }
 
+function RecenterMap({ center }: { center: [number, number] }) {
+    const map = useMapEvents({});
+    useEffect(() => {
+        map.flyTo(center, map.getZoom());
+    }, [center, map]);
+    return null;
+}
 export default function Map({ center = [51.505, -0.09], zoom = 13, initialMarker, onLocationSelect, interactive = true }: MapProps) {
     const [markerPos, setMarkerPos] = useState<[number, number] | null>(initialMarker || null);
 
@@ -84,6 +91,7 @@ export default function Map({ center = [51.505, -0.09], zoom = 13, initialMarker
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                <RecenterMap center={center} />
                 <LocationMarker position={markerPos} setPosition={setMarkerPos} onLocationSelect={interactive ? onLocationSelect : undefined} />
             </MapContainer>
         </div>
