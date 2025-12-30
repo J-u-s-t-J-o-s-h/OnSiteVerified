@@ -4,6 +4,8 @@ export interface Profile {
     id: string;
     email: string | null;
     full_name: string | null;
+    phone_number?: string | null;
+    job_title?: string | null;
     role: UserRole;
     created_at: string;
 }

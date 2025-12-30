@@ -1,8 +1,6 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import MapWrapper from "@/components/map/MapWrapper";
-import { Plus, MapPin, Save, Trash2, Loader2 } from "lucide-react";
+import { Plus, MapPin, Save, Trash2, Loader2, Search, Crosshair, Navigation } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { JobSite } from "@/types/database";
 
@@ -19,6 +17,13 @@ export default function SitesPage() {
         lng: -0.09,
         radius: 100,
     });
+
+    // Search & Location State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [locating, setLocating] = useState(false);
+    const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const supabase = createClient();
 
@@ -38,6 +43,58 @@ export default function SitesPage() {
 
     const handleLocationSelect = (lat: number, lng: number) => {
         setNewSite(prev => ({ ...prev, lat, lng }));
+    };
+
+    // Address Search Logic
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+
+        if (query.length < 3) {
+            setSuggestions([]);
+            return;
+        }
+
+        setSearching(true);
+        searchTimeout.current = setTimeout(async () => {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                setSuggestions(data);
+            } catch (err) {
+                console.error("Search error:", err);
+            } finally {
+                setSearching(false);
+            }
+        }, 500); // Debounce 500ms
+    };
+
+    const selectSuggestion = (s: any) => {
+        const lat = parseFloat(s.lat);
+        const lon = parseFloat(s.lon);
+        setNewSite(prev => ({ ...prev, lat, lng: lon }));
+        setSearchQuery(s.display_name);
+        setSuggestions([]);
+    };
+
+    // Find My Location
+    const handleFindLocation = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser");
+            return;
+        }
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setNewSite(prev => ({ ...prev, lat: latitude, lng: longitude }));
+                setLocating(false);
+            },
+            () => {
+                alert("Unable to retrieve your location");
+                setLocating(false);
+            }
+        );
     };
 
     const handleSave = async () => {
@@ -150,15 +207,65 @@ export default function SitesPage() {
                             </button>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-400 block mb-2">
-                                Drag the pin or click on the map to set location
+                        <div className="space-y-4">
+                            <label className="text-sm font-medium text-gray-400 block">
+                                Location Tools
                             </label>
-                            <MapWrapper
-                                center={[newSite.lat, newSite.lng]}
-                                initialMarker={[newSite.lat, newSite.lng]}
-                                onLocationSelect={handleLocationSelect}
-                            />
+
+                            {/* Address Search */}
+                            <div className="relative">
+                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => handleSearch(e.target.value)}
+                                    placeholder="Search for an address..."
+                                    className="w-full bg-gray-900 border border-gray-700 rounded-md py-2 pl-9 pr-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                                {searching && (
+                                    <div className="absolute right-3 top-2.5">
+                                        <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                                    </div>
+                                )}
+                                {suggestions.length > 0 && (
+                                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                        {suggestions.map((s, i) => (
+                                            <button
+                                                key={i}
+                                                onClick={() => selectSuggestion(s)}
+                                                className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors border-b border-gray-800 last:border-0"
+                                            >
+                                                {s.display_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Find Me Button */}
+                            <button
+                                onClick={handleFindLocation}
+                                disabled={locating}
+                                className="w-full bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 border border-blue-900/50 py-2 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all"
+                            >
+                                {locating ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Navigation className="h-4 w-4" />
+                                )}
+                                Find My Current Location
+                            </button>
+
+                            <div className="h-[300px] w-full rounded-lg overflow-hidden border border-gray-700 relative">
+                                <MapWrapper
+                                    center={[newSite.lat, newSite.lng]}
+                                    initialMarker={[newSite.lat, newSite.lng]}
+                                    onLocationSelect={handleLocationSelect}
+                                />
+                                <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md text-xs text-white px-2 py-1 rounded pointer-events-none z-[400]">
+                                    Click map to drag pin
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
