@@ -56,3 +56,18 @@ create policy "Admins can see all timesheets." on timesheets for select using (
 );
 create policy "Users can insert their own timesheets." on timesheets for insert with check (auth.uid() = user_id);
 create policy "Users can update their own timesheets." on timesheets for update using (auth.uid() = user_id);
+
+-- Auth Trigger
+-- This ensures a profile is created whenever a user signs up via Supabase Auth
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, email, full_name, role)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name', 'employee');
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();

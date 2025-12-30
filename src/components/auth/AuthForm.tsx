@@ -19,24 +19,7 @@ export default function AuthForm() {
         setLoading(true);
         setError(null);
 
-        // DEV/DEMO LOGIN BYPASS
-        if (email === "admin@onsiteverified.com" && password === "admin123") {
-            document.cookie = "onsiteverified-role=admin; path=/"; // Simple mock cookie
-            setTimeout(() => {
-                router.push("/admin");
-                router.refresh();
-            }, 1000);
-            return;
-        }
 
-        if (email === "employee@onsiteverified.com" && password === "employee123") {
-            document.cookie = "onsiteverified-role=employee; path=/"; // Simple mock cookie
-            setTimeout(() => {
-                router.push("/employee");
-                router.refresh();
-            }, 1000);
-            return;
-        }
 
         try {
             if (isLogin) {
@@ -80,11 +63,6 @@ export default function AuthForm() {
                     <p className="text-gray-400">
                         {isLogin ? "Enter your credentials to access the portal" : "Sign up to get started"}
                     </p>
-                    <div className="text-xs bg-blue-900/20 text-blue-300 border border-blue-900/50 p-2 rounded mt-2">
-                        <p className="font-semibold mb-1">Dev Credentials (Bypass):</p>
-                        <p>Admin: <span className="font-mono text-white">admin@onsiteverified.com</span> / <span className="font-mono text-white">admin123</span></p>
-                        <p>User: <span className="font-mono text-white">employee@onsiteverified.com</span> / <span className="font-mono text-white">employee123</span></p>
-                    </div>
                 </div>
             </div>
 
