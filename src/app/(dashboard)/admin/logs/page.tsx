@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, Filter, Download, ArrowUpRight, ArrowDownLeft, Loader2, MapPin } from "lucide-react";
+import { Calendar, Filter, Download, ArrowUpRight, ArrowDownLeft, Loader2, MapPin, X, ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 // Extended interface for the joined query
@@ -24,35 +24,98 @@ interface TimeLog {
 export default function TimeLogsPage() {
     const [logs, setLogs] = useState<TimeLog[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Filters
+    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
+    const [searchQuery, setSearchQuery] = useState("");
+    const [showFilters, setShowFilters] = useState(false);
+
     const supabase = createClient();
 
-    useEffect(() => {
-        const fetchLogs = async () => {
-            const { data, error } = await supabase
-                .from('timesheets')
-                .select(`
-                    id,
-                    clock_in_time,
-                    clock_out_time,
-                    status,
-                    clock_in_lat,
-                    clock_in_lon,
-                    profiles (full_name, email),
-                    job_sites (name)
-                `)
-                .order('clock_in_time', { ascending: false });
+    const fetchLogs = async () => {
+        setLoading(true);
+        let query = supabase
+            .from('timesheets')
+            .select(`
+                id,
+                clock_in_time,
+                clock_out_time,
+                status,
+                clock_in_lat,
+                clock_in_lon,
+                profiles!inner (full_name, email),
+                job_sites (name)
+            `)
+            .order('clock_in_time', { ascending: false });
 
-            if (error) {
-                console.error("Error fetching logs:", error);
-            } else if (data) {
-                // @ts-ignore - Supabase types join inference can be tricky, casting for now
-                setLogs(data as any);
+        // Date Range Filter
+        if (dateRange.start) {
+            query = query.gte('clock_in_time', new Date(dateRange.start).toISOString());
+        }
+        if (dateRange.end) {
+            // Add 1 day to include the end date fully
+            const endDate = new Date(dateRange.end);
+            endDate.setDate(endDate.getDate() + 1);
+            query = query.lt('clock_in_time', endDate.toISOString());
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error("Error fetching logs:", error);
+        } else if (data) {
+            // Client-side text search (Supabase joins make deep text search tricky without complex views)
+            let filteredData = data as any[];
+
+            if (searchQuery) {
+                const lowerQ = searchQuery.toLowerCase();
+                filteredData = filteredData.filter(log =>
+                    log.profiles?.full_name?.toLowerCase().includes(lowerQ) ||
+                    log.profiles?.email?.toLowerCase().includes(lowerQ) ||
+                    log.job_sites?.name?.toLowerCase().includes(lowerQ)
+                );
             }
-            setLoading(false);
-        };
 
+            setLogs(filteredData);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => {
         fetchLogs();
-    }, []);
+    }, [dateRange, searchQuery]); // Re-fetch when date changes. Search is client-side but we trigger re-fetch to keep consistent or debounce.
+
+    const handleExport = () => {
+        if (!logs.length) return;
+
+        const headers = ["Employee Name", "Email", "Date", "Job Site", "Clock In", "Clock Out", "Duration", "Status"];
+        const csvContent = [
+            headers.join(","),
+            ...logs.map(log => {
+                const duration = calculateDuration(log.clock_in_time, log.clock_out_time) || "Active";
+                return [
+                    `"${log.profiles?.full_name || ''}"`,
+                    `"${log.profiles?.email || ''}"`,
+                    `"${new Date(log.clock_in_time).toLocaleDateString()}"`,
+                    `"${log.job_sites?.name || 'Unassigned'}"`,
+                    `"${new Date(log.clock_in_time).toLocaleTimeString()}"`,
+                    `"${log.clock_out_time ? new Date(log.clock_out_time).toLocaleTimeString() : ''}"`,
+                    `"${duration}"`,
+                    `"${log.status}"`
+                ].join(",");
+            })
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `time_logs_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const formatTime = (isoString: string) => {
         if (!isoString) return '--';
@@ -74,20 +137,58 @@ export default function TimeLogsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Time Logs</h2>
                     <p className="text-gray-400 text-sm">View attendance history and verification status</p>
                 </div>
-                <div className="flex gap-2">
-                    <button className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-md transition-colors text-sm">
-                        <Calendar className="h-4 w-4" /> Date Range
-                    </button>
-                    <button className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-md transition-colors text-sm">
-                        <Filter className="h-4 w-4" /> Filter
-                    </button>
-                    <button className="flex items-center gap-2 bg-card border border-gray-700 hover:bg-gray-800 text-white px-3 py-2 rounded-md transition-colors text-sm ml-2">
-                        <Download className="h-4 w-4" /> Export
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Filters Section */}
+                    <div className="flex items-center gap-2 bg-card border border-gray-800 p-1 rounded-lg">
+                        <div className="flex items-center gap-2 px-2 border-r border-gray-800">
+                            <Calendar className="h-4 w-4 text-gray-500" />
+                            <input
+                                type="date"
+                                className="bg-transparent text-sm text-white focus:outline-none w-32"
+                                value={dateRange.start}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                            />
+                            <span className="text-gray-600">-</span>
+                            <input
+                                type="date"
+                                className="bg-transparent text-sm text-white focus:outline-none w-32"
+                                value={dateRange.end}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                            />
+                        </div>
+                        <div className="px-2">
+                            <input
+                                type="text"
+                                placeholder="Search employee or site..."
+                                className="bg-transparent text-sm text-white focus:outline-none w-48 placeholder:text-gray-600"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        {(dateRange.start || dateRange.end || searchQuery) && (
+                            <button
+                                onClick={() => {
+                                    setDateRange({ start: "", end: "" });
+                                    setSearchQuery("");
+                                }}
+                                className="p-1 hover:bg-gray-800 rounded-full text-gray-500 hover:text-white transition-colors"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium"
+                    >
+                        <Download className="h-4 w-4" /> Export CSV
                     </button>
                 </div>
             </div>
@@ -119,7 +220,7 @@ export default function TimeLogsPage() {
                             ) : logs.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                                        No time logs found.
+                                        No time logs found matching your filters.
                                     </td>
                                 </tr>
                             ) : (
