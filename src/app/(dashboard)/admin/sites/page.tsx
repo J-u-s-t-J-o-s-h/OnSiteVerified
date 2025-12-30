@@ -1,0 +1,205 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import MapWrapper from "@/components/map/MapWrapper";
+import { Plus, MapPin, Save, Trash2, Loader2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { JobSite } from "@/types/database";
+
+export default function SitesPage() {
+    const [sites, setSites] = useState<JobSite[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    // New site form state
+    const [newSite, setNewSite] = useState<{ name: string; lat: number; lng: number; radius: number }>({
+        name: "",
+        lat: 51.505,
+        lng: -0.09,
+        radius: 100,
+    });
+
+    const supabase = createClient();
+
+    const fetchSites = async () => {
+        const { data, error } = await supabase
+            .from('job_sites')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (data) setSites(data);
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        fetchSites();
+    }, []);
+
+    const handleLocationSelect = (lat: number, lng: number) => {
+        setNewSite(prev => ({ ...prev, lat, lng }));
+    };
+
+    const handleSave = async () => {
+        if (!newSite.name) return;
+        setSaving(true);
+
+        const { error } = await supabase.from('job_sites').insert({
+            name: newSite.name,
+            latitude: newSite.lat,
+            longitude: newSite.lng,
+            radius_meters: newSite.radius
+        });
+
+        if (!error) {
+            await fetchSites();
+            setShowForm(false);
+            setNewSite({ name: "", lat: 51.505, lng: -0.09, radius: 100 });
+        } else {
+            alert("Error saving site: " + error.message);
+        }
+        setSaving(false);
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this job site?")) return;
+
+        const { error } = await supabase.from('job_sites').delete().eq('id', id);
+        if (!error) {
+            setSites(sites.filter(s => s.id !== id));
+        } else {
+            alert("Error deleting site: " + error.message);
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white">Job Sites</h2>
+                <button
+                    onClick={() => setShowForm(!showForm)}
+                    className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
+                >
+                    {showForm ? "Cancel" : <><Plus className="h-4 w-4" /> Add Site</>}
+                </button>
+            </div>
+
+            {showForm && (
+                <div className="bg-card border border-gray-800 rounded-xl p-6 shadow-xl animate-in fade-in slide-in-from-top-4">
+                    <div className="grid lg:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-medium text-white mb-4">New Site Details</h3>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-300">Site Name</label>
+                                <input
+                                    type="text"
+                                    value={newSite.name}
+                                    onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
+                                    className="w-full bg-gray-900/50 border border-gray-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="e.g. Downtown Project"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-300">Latitude</label>
+                                    <input
+                                        type="number"
+                                        value={newSite.lat}
+                                        readOnly
+                                        className="w-full bg-gray-900/30 border border-gray-800 rounded-md py-2 px-3 text-gray-400 cursor-not-allowed"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-300">Longitude</label>
+                                    <input
+                                        type="number"
+                                        value={newSite.lng}
+                                        readOnly
+                                        className="w-full bg-gray-900/30 border border-gray-800 rounded-md py-2 px-3 text-gray-400 cursor-not-allowed"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-300">Geofence Radius (meters)</label>
+                                <input
+                                    type="range"
+                                    min="50"
+                                    max="1000"
+                                    step="50"
+                                    value={newSite.radius}
+                                    onChange={(e) => setNewSite({ ...newSite, radius: parseInt(e.target.value) })}
+                                    className="w-full"
+                                />
+                                <div className="flex justify-between text-xs text-gray-500">
+                                    <span>50m</span>
+                                    <span className="text-primary font-bold">{newSite.radius}m</span>
+                                    <span>1000m</span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Save Site
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-400 block mb-2">
+                                Drag the pin or click on the map to set location
+                            </label>
+                            <MapWrapper
+                                center={[newSite.lat, newSite.lng]}
+                                initialMarker={[newSite.lat, newSite.lng]}
+                                onLocationSelect={handleLocationSelect}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="flex justify-center py-12 text-gray-500">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading sites...
+                </div>
+            ) : sites.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 border border-gray-800 rounded-lg border-dashed">
+                    No job sites found. Add one to get started.
+                </div>
+            ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {sites.map((site) => (
+                        <div key={site.id} className="bg-card border border-gray-800 p-4 rounded-lg flex flex-col justify-between hover:border-gray-700 transition-colors">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-2 text-white font-medium">
+                                    <MapPin className="h-5 w-5 text-primary" />
+                                    {site.name}
+                                </div>
+                                <button
+                                    onClick={() => handleDelete(site.id)}
+                                    className="text-gray-500 hover:text-red-400"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
+                            <div className="text-xs text-gray-500 space-y-1 mb-4">
+                                <p>Lat: {site.latitude.toFixed(6)}</p>
+                                <p>Lng: {site.longitude.toFixed(6)}</p>
+                                <p>Radius: {site.radius_meters}m</p>
+                            </div>
+                            <button className="w-full text-sm bg-gray-800 hover:bg-gray-700 text-white py-1.5 rounded transition-colors">
+                                View Details
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}

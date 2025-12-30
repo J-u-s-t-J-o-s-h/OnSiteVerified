@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+    --color-background: #0f172a;
+    --color-foreground: #f8fafc;
+
+    --color-primary: #3b82f6;
+    --color-primary-foreground: #ffffff;
+
+    --color-card: #1e293b;
+    --color-card-foreground: #f1f5f9;
+
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 
+  In v4 these are not needed if using the @theme block above to map to utilities 
+  but let's keep the standard CSS variables for runtime usage if needed 
+*/
+:root {
+    --background: #0f172a;
+    --foreground: #f8fafc;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --card: #1e293b;
+    --card-foreground: #f1f5f9;
+}
+
+body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-sans);
+}
