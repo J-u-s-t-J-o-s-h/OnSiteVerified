@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { User, Lock, Mail } from "lucide-react";
 
 export default function AuthForm() {
+    const searchParams = useSearchParams();
+    const mode = searchParams.get('mode');
+
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [isLogin, setIsLogin] = useState(true);
+    // Default to login unless mode is explicitly 'signup'
+    const [isLogin, setIsLogin] = useState(mode !== 'signup');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
