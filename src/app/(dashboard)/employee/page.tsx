@@ -76,6 +76,13 @@ export default function EmployeeDashboard() {
         };
     }, []);
 
+    // 3. React on Location or Sites update to find nearest
+    useEffect(() => {
+        if (location && sites.length > 0) {
+            findNearestSite(location.coords.latitude, location.coords.longitude);
+        }
+    }, [location, sites]);
+
     // 2. Geolocation Logic (Auto-Watch)
     const startLocationWatch = () => {
         setLocationError(null);
@@ -90,7 +97,7 @@ export default function EmployeeDashboard() {
         watchIdRef.current = navigator.geolocation.watchPosition(
             (position) => {
                 setLocation(position);
-                findNearestSite(position.coords.latitude, position.coords.longitude);
+                // Removed findNearestSite call here to avoid stale closure
             },
             (error) => {
                 if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost') {
@@ -128,7 +135,6 @@ export default function EmployeeDashboard() {
 
         setLocation(mockPosition);
         setLocationError(null);
-        findNearestSite(lat, lng);
     };
 
     const findNearestSite = (lat: number, lng: number) => {
@@ -362,13 +368,9 @@ export default function EmployeeDashboard() {
                 </div>
             )}
 
-            {/* Debug Info (Temporary) */}
-            <div className="bg-black/50 p-4 rounded text-xs font-mono text-gray-500 mt-8 break-all">
-                <p>User ID: {userId}</p>
-                <p>Sites Loaded: {sites.length}</p>
-                <p>Location: {location ? `${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}` : 'Waiting'}</p>
-                <p>Nearest: {nearestSite?.site?.name || 'None'}</p>
-            </div>
         </div>
+    )
+}
+        </div >
     );
 }
