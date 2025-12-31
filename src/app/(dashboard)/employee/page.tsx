@@ -36,11 +36,17 @@ export default function EmployeeDashboard() {
             setUserId(user.id);
 
             // Fetch Job Sites and filter client-side to ensure consistency
-            const { data: sitesData } = await supabase.from('job_sites').select('*');
+            const { data: sitesData, error } = await supabase.from('job_sites').select('*');
+
+            if (error) {
+                console.error("Supabase Error:", error);
+            }
 
             if (sitesData) {
-                // Filter for active sites only
-                const active = sitesData.filter(s => s.is_active === true);
+                console.log("Raw Sites Data:", sitesData);
+                // Filter for active sites only - Relaxed check for 'true' to catch truthy values
+                const active = sitesData.filter(s => s.is_active);
+                console.log("Filtered Active Sites:", active);
                 setSites(active);
             }
 
@@ -355,6 +361,14 @@ export default function EmployeeDashboard() {
                     </div>
                 </div>
             )}
+
+            {/* Debug Info (Temporary) */}
+            <div className="bg-black/50 p-4 rounded text-xs font-mono text-gray-500 mt-8 break-all">
+                <p>User ID: {userId}</p>
+                <p>Sites Loaded: {sites.length}</p>
+                <p>Location: {location ? `${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}` : 'Waiting'}</p>
+                <p>Nearest: {nearestSite?.site?.name || 'None'}</p>
+            </div>
         </div>
     );
 }
